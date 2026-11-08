@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0a1128">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>气球打字 · Balloon Typing</title>
+<style>
+  :root{
+    --bg:#0a1128;
+    --fg:#eef2ff;
+    --muted:#8b93b8;
+    --accent:#7dd3fc;
+    --panel:rgba(13,22,52,.85);
+    --line:rgba(125,211,252,.25);
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;overflow:hidden}
+  body{
+    background:radial-gradient(1200px 700px at 50% -10%,#172a5c 0%,var(--bg) 55%,#060a18 100%);
+    color:var(--fg);
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+    user-select:none;-webkit-user-select:none;touch-action:manipulation;
+    display:flex;flex-direction:column;
+  }
+  header{
+    display:flex;align-items:center;gap:14px;
+    padding:10px 16px;flex:none;
+    border-bottom:1px solid var(--line);
+    background:rgba(8,14,34,.55);
+  }
+  .logo{font-weight:800;letter-spacing:.5px;font-size:15px;white-space:nowrap}
+  .logo b{color:var(--accent)}
+  .stats{display:flex;gap:14px;margin-left:auto;font-variant-numeric:tabular-nums}
+  .stat{display:flex;flex-direction:column;align-items:flex-end;line-height:1.15}
+  .stat .k{font-size:10px;color:var(--muted);letter-spacing:1px}
+  .stat .v{font-size:18px;font-weight:700}
+  #score{color:#fde68a}
+  #combo{color:var(--accent)}
+  #missnum{color:#fda4af}
+  #mute{
+    border:1px solid var(--line);background:var(--panel);color:var(--fg);
+    width:34px;height:34px;border-radius:10px;font-size:16px;cursor:pointer;flex:none;
+  }
+  #mute:active{transform:scale(.94)}
+  main{position:relative;flex:1;overflow:hidden}
+  canvas{position:absolute;inset:0;display:block}
+  #hud{
+    position:absolute;inset:0;pointer-events:none;
+    display:flex;align-items:center;justify-content:center;flex-direction:column;gap:14px;
+    text-align:center;padding:20px;
+  }
+  #hud .pulse{
+    width:70px;height:70px;border-radius:50%;
+    background:radial-gradient(circle at 35% 30%,#ff9d9d,#f43f5e 70%);
+    box-shadow:0 0 40px rgba(244,63,94,.55);margin:0 auto;
+    animation:bob 2.2s ease-in-out infinite;
+  }
+  @keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}
+  #hud h1{font-size:clamp(26px,6vw,40px);letter-spacing:2px}
+  #hud h1 b{color:#fda4af}
+  #hud p{color:var(--muted);font-size:14px;max-width:430px;line-height:1.8}
+  #hud kbd{
+    display:inline-block;border:1px solid var(--line);border-bottom-width:3px;
+    background:var(--panel);border-radius:6px;padding:2px 9px;font-size:13px;color:var(--accent);
+  }
+  .btn{
+    pointer-events:auto;border:0;border-radius:12px;cursor:pointer;
+    font-size:16px;font-weight:700;padding:13px 42px;color:#0a1128;
+    background:linear-gradient(180deg,#baf3ff,#38bdf8);
+    box-shadow:0 6px 24px rgba(56,189,248,.35);
+  }
+  .btn:active{transform:translateY(2px)}
+  #over{
+    position:absolute;inset:0;display:none;align-items:center;justify-content:center;
+    background:rgba(4,8,20,.72);backdrop-filter:blur(6px);flex-direction:column;gap:14px;text-align:center;
+  }
+  #over .card{
+    background:var(--panel);border:1px solid var(--line);border-radius:20px;
+    padding:34px 40px;display:flex;flex-direction:column;gap:12px;align-items:center;
+  }
+  #over h2{font-size:24px;letter-spacing:1px}
+  #over .big{font-size:46px;font-weight:800;color:#fde68a}
+  #over .row{display:flex;gap:30px;color:var(--muted);font-size:13px}
+  #over .row b{display:block;color:var(--fg);font-size:20px;margin-top:2px}
+  #best-tag{display:none;font-size:12px;color:#4ade80;border:1px solid rgba(74,222,128,.4);padding:3px 10px;border-radius:99px}
+  footer{
+    flex:none;padding:7px 16px;font-size:11px;color:var(--muted);
+    text-align:center;border-top:1px solid var(--line);background:rgba(8,14,34,.4);
+  }
+  footer a{color:var(--muted)}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">🎈 气球<b>打字</b></div>
+  <div class="stats">
+    <div class="stat"><span class="k">得分</span><span class="v" id="score">0</span></div>
+    <div class="stat"><span class="k">连击</span><span class="v" id="combo">×1</span></div>
+    <div class="stat"><span class="k">漏气</span><span class="v" id="missnum">0/5</span></div>
+  </div>
+  <button id="mute" title="声音开关">🔊</button>
+</header>
+
+<main id="stage">
+  <canvas id="cv"></canvas>
+  <div id="hud">
+    <div class="pulse"></div>
+    <h1>气球<b>打字</b></h1>
+    <p>字母写在一个个气球上，不断升起。<br>看到想戳的气球，在键盘上按下它身上的字母，<kbd>砰</kbd>——戳爆它！</p>
+    <p>打错字母会掉连击；漏掉 5 个气球就结束。</p>
+    <button class="btn" id="start">开始游戏</button>
+  </div>
+  <div id="over">
+    <div class="card">
+      <h2>游戏结束</h2>
+      <div class="big" id="final">0</div>
+      <div class="row">
+        <span>戳爆 <b id="ok">0</b></span>
+        <span>漏掉 <b id="miss">0</b></span>
+        <span>戳最高 <b id="dist">0</b></span>
+      </div>
+      <div id="best-tag">🏆 新纪录</div>
+      <button class="btn" id="again">再来一局</button>
+    </div>
+  </div>
+</main>
+
+<footer>单文件游戏 · 零依赖 · 手机键盘可用 · <a href="https://xdash.me" target="_blank" rel="noopener">xdash.me</a></footer>
+
+<script>
+(function(){
+"use strict";
+var cv=document.getElementById('cv'),ctx=cv.getContext('2d');
+var stage=document.getElementById('stage');
+var hud=document.getElementById('hud'),over=document.getElementById('over');
+var elScore=document.getElementById('score'),elCombo=document.getElementById('combo'),elMiss=document.getElementById('missnum');
+var elOk=document.getElementById('ok'),elMissD=document.getElementById('miss'),elDist=document.getElementById('dist');
+var elFinal=document.getElementById('final'),elBest=document.getElementById('best-tag');
+var btnStart=document.getElementById('start'),btnAgain=document.getElementById('again'),btnMute=document.getElementById('mute');
+
+var W=0,H=0,DPR=1;
+function resize(){
+  DPR=Math.min(window.devicePixelRatio||1,2);
+  var r=stage.getBoundingClientRect();
+  W=r.width;H=r.height;
+  cv.width=Math.round(W*DPR);cv.height=Math.round(H*DPR);
+  cv.style.width=W+'px';cv.style.height=H+'px';
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+}
+window.addEventListener('resize',resize);
+
+// ---------- 游戏数据 ----------
+var LETTERS="ABCDEFGHJKLMNPQRSTUVWXYZ"; // 去掉 I/O，避免误按
+var balloons=[],floats=[],fx=[];
+var running=false,overed=false;
+var score=0,combo=1,okCount=0,missCount=0,topHit=0;
+var MAXMISS=5;
+var spawnAcc=0,t=0,last=0;
+var muted=localStorage.getItem('bt_mute')==='1';
+btnMute.textContent=muted?'🔇':'🔊';
+var best=parseInt(localStorage.getItem('bt_best')||'0',10)||0;
+
+// ---------- 音效（WebAudio 合成，零外部文件） ----------
+var AC=null;
+function ac(){ if(!AC){ try{ AC=new (window.AudioContext||window.webkitAudioContext)(); }catch(e){} } if(AC&&AC.state==='suspended')AC.resume(); return AC; }
+function tone(f0,f1,dur,type,vol){
+  if(muted)return;
+  var a=ac(); if(!a)return;
+  var o=a.createOscillator(),g=a.createGain();
+  o.type=type||'sine';
+  o.frequency.setValueAtTime(f0,a.currentTime);
+  o.frequency.exponentialRampToValueAtTime(Math.max(f1,1),a.currentTime+dur);
+  g.gain.setValueAtTime(0.0001,a.currentTime);
+  g.gain.exponentialRampToValueAtTime(vol||0.16,a.currentTime+0.012);
+  g.gain.exponentialRampToValueAtTime(0.0001,a.currentTime+dur);
+  o.connect(g);g.connect(a.destination);
+  o.start();o.stop(a.currentTime+dur+0.02);
+}
+var sfxPop=function(){tone(300,900,0.09,'square',0.13);tone(1200,1600,0.06,'sine',0.09);};
+var sfxEsc=function(){tone(420,150,0.22,'sawtooth',0.09);};
+var sfxWrong=function(){tone(170,120,0.08,'square',0.07);};
+var sfxStart=function(){tone(392,392,0.1,'sine',0.12);setTimeout(function(){tone(523,523,0.1,'sine',0.12);},90);setTimeout(function(){tone(659,659,0.14,'sine',0.12);},180);};
+
+// ---------- 工具 ----------
+function rand(a,b){return a+Math.random()*(b-a);}
+function pickLetter(){
+  var p=Math.random();
+  if(p<0.55) return LETTERS[Math.floor(Math.random()*10)]; // 高频字母多出现
+  return LETTERS[Math.floor(Math.random()*LETTERS.length)];
+}
+function spawnBalloon(startY){
+  var ch=pickLetter();
+  var speed=rand(36,74)+Math.min(44,t*2.2);     // 随时间提速
+  var size=Math.max(34,72-t*0.7);                // 随时间略变小
+  balloons.push({
+    ch:ch,
+    x:rand(20,Math.max(30,W-120)),
+    y:startY!==undefined?startY:H+size+10,
+    r:size,
+    vy:-speed,
+    hue:Math.floor(rand(0,360))
+  });
+}
+function drawBalloon(b){
+  var gx=b.x,gy=b.y,radius=b.r;
+  // 绳线（随风摆）
+  ctx.beginPath();
+  ctx.moveTo(gx,gy+radius*0.92);
+  var sway=Math.sin(t*2.6+b.x*0.02)*3;
+  ctx.quadraticCurveTo(gx+sway,gy+radius+14,gx+sway*1.6,gy+radius+26);
+  ctx.strokeStyle='rgba(238,242,255,.4)';
+  ctx.lineWidth=1.4;
+  ctx.stroke();
+  // 主体
+  var grad=ctx.createRadialGradient(gx-radius*0.32,gy-radius*0.38,radius*0.1,gx,gy,radius);
+  grad.addColorStop(0,'hsla('+b.hue+',95%,88%,.96)');
+  grad.addColorStop(0.62,'hsla('+b.hue+',88%,62%,.94)');
+  grad.addColorStop(1,'hsla('+b.hue+',85%,48%,.92)');
+  ctx.beginPath();
+  ctx.ellipse(gx,gy,radius,radius*1.18,0,0,Math.PI*2);
+  ctx.fillStyle=grad;
+  ctx.fill();
+  // 高光
+  ctx.beginPath();
+  ctx.ellipse(gx-radius*0.34,gy-radius*0.46,radius*0.16,radius*0.22,-0.5,0,Math.PI*2);
+  ctx.fillStyle='rgba(255,255,255,.5)';
+  ctx.fill();
+  // 结
+  ctx.beginPath();
+  ctx.moveTo(gx,gy+radius*1.12);
+  ctx.lineTo(gx-5,gy+radius*1.3);
+  ctx.lineTo(gx+5,gy+radius*1.3);
+  ctx.closePath();
+  ctx.fillStyle='hsla('+b.hue+',80%,45%,.95)';
+  ctx.fill();
+  // 字母
+  ctx.font='700 '+Math.round(radius*0.9)+'px "SF Mono",Menlo,Consolas,"Courier New",monospace';
+  ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.lineWidth=Math.max(4,radius*0.14);
+  ctx.strokeStyle='rgba(10,17,40,.55)';
+  ctx.strokeText(b.ch,gx,gy);
+  ctx.fillStyle='#ffffff';
+  ctx.fillText(b.ch,gx,gy);
+}
+function drawFx(f){
+  var a=1-f.age/f.life;
+  ctx.strokeStyle='hsla('+f.hue+',90%,70%,'+(0.9*a).toFixed(3)+')';
+  ctx.lineWidth=Math.max(1.5,5*a);
+  ctx.beginPath();
+  ctx.arc(f.x,f.y,f.r*(1+(1-a)*2.2),0,Math.PI*2);
+  ctx.stroke();
+  ctx.fillStyle='rgba(255,255,255,'+(0.75*a).toFixed(3)+')';
+  ctx.font='700 '+Math.round(13+f.points*0.06)+'px sans-serif';
+  ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.fillText('+'+f.points,f.x,f.y-f.r*0.4);
+}
+function drawFloat(f){
+  var a=1-f.age/0.6;
+  ctx.font='700 15px "SF Mono",Menlo,Consolas,monospace';
+  ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.fillStyle='rgba(248,113,113,'+(0.8*a).toFixed(3)+')';
+  ctx.fillText(f.ch,f.x,f.y-f.age*46);
+}
+function popBalloon(b){
+  var idx=balloons.indexOf(b);
+  if(idx<0)return;
+  balloons.splice(idx,1);
+  fx.push({x:b.x,y:b.y,r:b.r,hue:b.hue,age:0,life:0.5,points:10*combo});
+}
+function addMiss(){
+  missCount++;
+  elMiss.textContent=missCount+'/'+MAXMISS;
+  sfxEsc();
+  if(missCount>=MAXMISS) gameOver();
+}
+function updateUI(){
+  elScore.textContent=score;
+  elCombo.textContent='×'+combo;
+}
+function gameOver(){
+  if(!running)return;
+  running=false;overed=true;
+  balloons=[];floats=[];fx=[];
+  elFinal.textContent=score;
+  elOk.textContent=okCount;
+  elMissD.textContent=missCount;
+  elDist.textContent=Math.round(topHit);
+  if(score>best){
+    best=score;
+    localStorage.setItem('bt_best',String(best));
+    elBest.style.display='inline-block';
+  }else{
+    elBest.style.display='none';
+  }
+  over.style.display='flex';
+}
+function resetGame(){
+  balloons=[];floats=[];fx=[];
+  score=0;combo=1;okCount=0;missCount=0;topHit=0;t=0;spawnAcc=0;
+  elScore.textContent=0;elCombo.textContent='×1';
+  elMiss.textContent='0/'+MAXMISS;
+  over.style.display='none';
+}
+function startGame(){
+  resetGame();
+  hud.style.display='none';
+  running=true;overed=false;
+  sfxStart();
+  // 开局先铺 irrelevant 4 个，错落分布
+  spawnBalloon(H*0.30);
+  spawnBalloon(H*0.46);
+  spawnBalloon(H*0.62);
+  spawnBalloon(H*0.78);
+}
+btnStart.addEventListener('click',startGame);
+btnAgain.addEventListener('click',startGame);
+btnMute.addEventListener('click',function(){
+  muted=!muted;
+  localStorage.setItem('bt_mute',muted?'1':'0');
+  btnMute.textContent=muted?'🔇':'🔊';
+  if(!muted){ ac(); }
+});
+
+function keyDown(e){
+  if(e.metaKey||e.ctrlKey||e.altKey)return;
+  var raw=e.key!==undefined?e.key:String.fromCharCode(e.keyCode||e.key);
+  var ch=String(raw).toUpperCase();
+  if(!/^[A-Z]$/.test(ch))return;
+  e.preventDefault();
+  if(overed){ startGame(); return; }
+  if(!running)return;
+  var hit=null,i,b;
+  // 命中最靠近底部（y 最大）的同字母气球
+  for(i=0;i<balloons.length;i++){
+    b=balloons[i];
+    if(b.ch===ch&&(!hit||b.y>hit.y))hit=b;
+  }
+  if(hit){
+    var alt=Math.round(H-hit.y);          // 戳爆时的高度
+    if(alt>topHit)topHit=alt;
+    okCount++;combo++;
+    score+=10*combo;
+    updateUI();
+    popBalloon(hit);
+    sfxPop();
+  }else{
+    combo=1;
+    updateUI();
+    sfxWrong();
+    floats.push({ch:ch,x:Math.max(26,Math.min(W-26,e.clientX||W/2)),y:Math.max(60,H-30),age:0});
+  }
+}
+document.addEventListener('keydown',keyDown);
+
+// ---------- 主循环 ----------
+function frame(now){
+  requestAnimationFrame(frame);
+  if(!last)last=now;
+  var dt=Math.min((now-last)/1000,0.05);
+  last=now;
+  t+=dt;
+  if(running){
+    // 生成节奏：1.05s → 0.42s
+    spawnAcc+=dt;
+    var interval=Math.max(0.42,1.05-t*0.012);
+    if(spawnAcc>=interval){
+      spawnAcc=0;
+      spawnBalloon();
+    }
+    // 移动 + 出界判定
+    for(var i=balloons.length-1;i>=0;i--){
+      var b=balloons[i];
+      b.y+=b.vy*dt;
+      if(b.y+b.r<-8){ balloons.splice(i,1); addMiss(); }
+    }
+  }
+  // 浮动字母过期
+  for(var j=floats.length-1;j>=0;j--){
+    floats[j].age+=dt;
+    if(floats[j].age>0.6)floats.splice(j,1);
+  }
+  // 爆炸特效过期
+  for(var k=fx.length-1;k>=0;k--){
+    fx[k].age+=dt;
+    if(fx[k].age>fx[k].life)fx.splice(k,1);
+  }
+  // 绘制
+  ctx.clearRect(0,0,W,H);
+  var i2;
+  for(i2=0;i2<balloons.length;i2++)drawBalloon(balloons[i2]);
+  for(i2=0;i2<floats.length;i2++)drawFloat(floats[i2]);
+  for(i2=0;i2<fx.length;i2++)drawFx(fx[i2]);
+}
+requestAnimationFrame(frame);
+
+resize();
+})();
+</script>
+</body>
+</html>
